@@ -485,13 +485,13 @@ courses = ["COMP4332" , "ELEC1010", "COMP3221", "Big Data Management", "Dumb Dat
 def waitingListSizePrediction(cc, ln, ts):
 	#print("The predicted waiting list size of", cc, "Lecture", ln, "in", ts, "is \n")
 	#print("1, 3, 5, 8, 12")
-	with open('model1.json', "r") as f:
+	with open('model2.json', "r") as f:
 		model_json = f.read()
 	model = model_from_json(model_json)
-	model.load_weights('model1.h5')
+	model.load_weights('model2.h5')
 	newX = numpy.loadtxt('test.csv', delimiter=",")
 	print(newX)
-	newX = newX.reshape(1,3)
+	newX = newX.reshape(1,2)
 	print(newX)
 	newY = model.predict(newX, batch_size=50)
 	newY = newY.reshape(1)
@@ -502,6 +502,7 @@ def  waitingListSizeTraining():
 
 
 	#get all needed records
+	'''
 	results=db.courses.aggregate([{'$unwind':"$sections"},
 	{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
 	{'$project':{'code':1,'semester':1,'title':1,'credits':1,'recordTime':'$sections.recordTime','sectionId':'$sections.sectionId','quota':'$sections.quota','enrol':'$sections.enrol','wait':'$sections.wait','_id':0}}])
@@ -513,8 +514,10 @@ def  waitingListSizeTraining():
 		dict_writer = csv.DictWriter(output_file, keys)
 		dict_writer.writeheader()
 		dict_writer.writerows(results)
-		
-	#get credits, quota, enrol and wait
+	'''
+	
+	#get credits, quota, enrol and wait for model 1
+	'''
 	results2=db.courses.aggregate([{'$unwind':"$sections"},
 	{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
 	{'$project':{'credits':1,'quota':'$sections.quota','enrol':'$sections.enrol','wait':'$sections.wait','_id':0}}])
@@ -527,29 +530,40 @@ def  waitingListSizeTraining():
 		#dict_writer.writeheader()
 		dict_writer.writerows(results2)
 	
-	shuffler('firstTrain.csv','firstTrainShuffled.csv')
+	#shuffler('firstTrain.csv','firstTrainShuffled.csv')
+	'''
 	
-	'''
-	file_object = open('firstTrainShuffled.csv', 'r')
-	lines = csv.reader(file_object, delimiter=',', quotechar='"')
-	flag = 0
-	data=[]
-	for line in lines:
-		if line == []:
-			flag =1
-			continue
-		else:
-			data.append(line)
-	file_object.close()
-	if flag ==1: #if blank line is present in file
-		file_object = open('firstTrainShuffled.csv', 'w')
-		for line in data:
-			str1 = ','.join(line)
-			file_object.write(str1+"\n")
-		file_object.close() 
-	'''
+	
+	#get wait number with lookback for model 2
+	results3=db.courses.aggregate([{'$unwind':"$sections"},
+	{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
+	{'$project':{'sectionId':'$sections.sectionId','code':1,'wait':'$sections.wait','_id':0}},
+	{'$match': {'sectionId': {'$regex': re.compile('^L.', re.IGNORECASE)}}},
+	{'$project':{'sectionId':1,'code':1,'wait':1,'_id':0}}])
+
+	temp = []
+	codes = []
+	sectionIds = []
+	waits = []
+
+	for items in results3:
+		codes.append(str(items['code']))
+		sectionIds.append(str(items['sectionId']))
+		waits.append(int(items['wait']))
+		
+	for i in range(2,len(codes)):
+		if codes[i]==codes[i-1] and codes[i]==codes[i-2] and sectionIds[i]==sectionIds[i-1] and sectionIds[i]==sectionIds[i-2]:
+			temp.append(waits[i-2])
+			temp.append(waits[i-1])
+			temp.append(waits[i])
+		
+	waitArray = numpy.array(temp)
+	waitArray = waitArray.reshape(int(len(temp)/3),3)
+
+	numpy.savetxt("secondTrain.csv", waitArray, delimiter=",")
 	
 	#model 1
+	'''
 	numpy.random.seed(int(time.time()))
 	dataset = numpy.loadtxt('firstTrain.csv', delimiter=",")
 	X = dataset[:,0:3]
@@ -569,7 +583,28 @@ def  waitingListSizeTraining():
 	with open('model1.json', "w") as f:
 	    f.write(model_json)
 	model.save_weights('model1.h5')
-
+	'''
+	#model 2
+	print('training model 2')
+	numpy.random.seed(int(time.time()))
+	dataset = numpy.loadtxt('secondTrain.csv', delimiter=",")
+	X = dataset[:,0:2]
+	Y = dataset[:,2]
+	model = Sequential()
+	model.add(Dense(12, input_dim=2, activation='relu'))
+	model.add(Dense(8, activation='relu'))
+	model.add(Dense(1, activation='relu'))
+	keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0)#, amsgrad=False)
+	model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
+	#earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=0, verbose=0, mode='auto')
+	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=50)#, callbacks=[earlyStopping])
+	scores = model.evaluate(X, Y)
+	print("")
+	print("{}: {}".format(model.metrics_names[1], scores[1]*100))
+	model_json = model.to_json()
+	with open('model2.json', "w") as f:
+	    f.write(model_json)
+	model.save_weights('model2.h5')
 	
 	
 	print("Waiting list size training is successful")
@@ -578,13 +613,13 @@ def  waitingListSizeTraining():
 	
 	
 
-
+'''
 def shuffler(filename,outputfilename):
 	df = pandas.read_csv(filename, header=0)
 	# return the pandas dataframe
 	file = df.reindex(numpy.random.permutation(df.index))
 	file.to_csv(outputfilename, sep=',')
-
+'''
 
 
 
