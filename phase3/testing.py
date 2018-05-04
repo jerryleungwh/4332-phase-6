@@ -17,31 +17,62 @@ client = MongoClient('mongodb://localhost:27017')
 db = client['hkust']
 
 
-#get wait number with lookback
-results3=db.courses.aggregate([{'$unwind':"$sections"},
-{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
-{'$project':{'sectionId':'$sections.sectionId','code':1,'wait':'$sections.wait','_id':0}},
-{'$match': {'sectionId': {'$regex': re.compile('^L.', re.IGNORECASE)}}},
-{'$project':{'sectionId':1,'code':1,'wait':1,'_id':0}}])
+def waitingListSizePrediction(cc, ln, ts):
 
-temp = []
-codes = []
-sectionIds = []
-waits = []
+	lectureNo = 'L'+str(ln)
 
-for items in results3:
-	codes.append(str(items['code']))
-	sectionIds.append(str(items['sectionId']))
-	waits.append(int(items['wait']))
-	
-for i in range(2,len(codes)):
-	if codes[i]==codes[i-1] and codes[i]==codes[i-2] and codes[i]==codes[i-3] and sectionIds[i]==sectionIds[i-1] and sectionIds[i]==sectionIds[i-2] and sectionIds[i]==sectionIds[i-3]:
-		temp.append(waits[i-3])
-		temp.append(waits[i-2])
-		temp.append(waits[i-1])
-		temp.append(waits[i])
-	
-waitArray = numpy.array(temp)
-waitArray = waitArray.reshape(int(len(temp)/4),4)
+	results=db.courses.aggregate([{'$unwind':"$sections"},
+	{'$match': {'$and': [{'code': {'$regex': re.compile(cc, re.IGNORECASE)}},{'sections.sectionId': {'$regex': re.compile(lectureNo, re.IGNORECASE)}}] }},
+	{'$project':{'code':1, 'sectionId':'$sections.sectionId','wait':'$sections.wait','sections.recordTime':1, 'timecheck': {'$eq': [ "$sections.recordTime", ts ] }}},
+	{'$match':{'timecheck':True}},
+	{'$sort':{'sections.recordTime':-1}},
+	{'$project':{'_id':0, 'code':1,'sectionId':1,'wait':1,'recordTime':'$sections.recordTime','timecheck':1}}])
+	#results_count=results.count()
+	value = []
+	for items in results:
+		value.append(items['wait'])
+	if len(value)==1:
+		ans = 'The predicted \'wait\' value is '+str(value[0])
+		print(ans)
+	else:		
+		db.courses.aggregate([{'$unwind':"$sections"},
+		{'$match': {'$and': [{'code': {'$regex': re.compile(cc, re.IGNORECASE)}},{'sections.sectionId': {'$regex': re.compile(lectureNo, re.IGNORECASE)}}] }},
+		{'$project':{'code':1, 'credits':1,'sectionId':'$sections.sectionId','wait':'$sections.wait','enrol':'$sections.enrol','quota':'$sections.quota','sections.recordTime':1, 'timecheck': {'$lte': [ "$sections.recordTime", ts ] }}},
+		{'$match':{'timecheck':True}},
+		{'$sort':{'sections.recordTime':-1}},
+		{'$project':{'_id':0, 'code':1, 'credits':1,'sectionId':1,'enrol':1,'quota':1,'wait':1,'recordTime':'$sections.recordTime','timecheck':1}},
+		{'$out' : 'earlierDocuments' }])
+		
+		getOne = db.earlierDocuments.find().skip(0).limit(1);
+		getTwo = db.earlierDocuments.find().skip(0).limit(2);
+		getThree = db.earlierDocuments.find().skip(0).limit(3);
+		
+		#db.earlierDocuments.drop()
+		
+		model1array = []
+		model2array = []
+		model3array = []
+		for items1 in getOne:
+			model1array.append(items1['credits'])
+			model1array.append(items1['quota'])
+			model1array.append(items1['enrol'])
+		for items2 in getTwo:
+			model2array.append(items2['wait'])
+		for items3 in getThree:
+			model3array.append(items3['wait'])
+		print(model1array)
+		print(model2array)
+		print(model3array)
+			
 
-numpy.savetxt("thirdTrain.csv", waitArray, delimiter=",")
+cc = input("Input the course code (in a format of (CCCCXXXXC) where \"C\" denotes a capitalized letter and \"X\" denotes a digit    ")
+while not bool(re.match('[A-Z]{4}[0-9]{4}[A-Z]?', cc)):
+	cc = input("Input a correct course code (in a format of (CCCCXXXXC) where \"C\" denotes a capitalized letter and \"X\" denotes a digit    ")
+ln = int(input("Please indicate the lecture number (only numeric value)    "))
+ts = input("Please input time slot (in a format of YYYY-MM-DD HH:mm)    ")
+ts = datetime.strptime(ts, "%Y-%m-%d %H:%M")
+
+waitingListSizePrediction(cc, ln, ts)
+
+
+

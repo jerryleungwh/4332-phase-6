@@ -9,6 +9,8 @@ import subprocess
 import csv
 from keras.models import Sequential
 from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import GRU
 from keras.models import model_from_json
 import numpy
 import time
@@ -67,11 +69,11 @@ def main():
 		elif (choice == '4'):
 			while True:
 				try:
-					cc = input("Input the course code (in a format of (CCCCXXXXC) where \"C\" denotes a capitalized letter and \"X\" denotes a digit ")
+					cc = input("Input the course code (in a format of (CCCCXXXXC) where \"C\" denotes a capitalized letter and \"X\" denotes a digit    ")
 					while not bool(re.match('[A-Z]{4}[0-9]{4}[A-Z]?', cc)):
-						cc = input("Input a correct course code (in a format of (CCCCXXXXC) where \"C\" denotes a capitalized letter and \"X\" denotes a digit ")
-					ln = int(input("Please indicate the lecture number (only numeric value)"))
-					ts = input("Please input time slot (in a format of YYYY-MM-DD HH:mm) ")
+						cc = input("Input a correct course code (in a format of (CCCCXXXXC) where \"C\" denotes a capitalized letter and \"X\" denotes a digit    ")
+					ln = int(input("Please indicate the lecture number (only numeric value)    "))
+					ts = input("Please input time slot (in a format of YYYY-MM-DD HH:mm)    ")
 					ts = datetime.strptime(ts, "%Y-%m-%d %H:%M")
 					break
 				except ValueError:
@@ -485,17 +487,120 @@ courses = ["COMP4332" , "ELEC1010", "COMP3221", "Big Data Management", "Dumb Dat
 def waitingListSizePrediction(cc, ln, ts):
 	#print("The predicted waiting list size of", cc, "Lecture", ln, "in", ts, "is \n")
 	#print("1, 3, 5, 8, 12")
-	with open('model2.json', "r") as f:
-		model_json = f.read()
-	model = model_from_json(model_json)
-	model.load_weights('model2.h5')
-	newX = numpy.loadtxt('test.csv', delimiter=",")
-	print(newX)
-	newX = newX.reshape(1,2)
-	print(newX)
-	newY = model.predict(newX, batch_size=50)
-	newY = newY.reshape(1)
-	print(newY)
+	lectureNo = 'L'+str(ln)
+
+	results=db.courses.aggregate([{'$unwind':"$sections"},
+	{'$match': {'$and': [{'code': {'$regex': re.compile(cc, re.IGNORECASE)}},{'sections.sectionId': {'$regex': re.compile(lectureNo, re.IGNORECASE)}}] }},
+	{'$project':{'code':1, 'sectionId':'$sections.sectionId','wait':'$sections.wait','sections.recordTime':1, 'timecheck': {'$eq': [ "$sections.recordTime", ts ] }}},
+	{'$match':{'timecheck':True}},
+	{'$sort':{'sections.recordTime':-1}},
+	{'$project':{'_id':0, 'code':1,'sectionId':1,'wait':1,'recordTime':'$sections.recordTime','timecheck':1}}])
+	#results_count=results.count()
+	value = []
+	for items in results:
+		value.append(items['wait'])
+	if len(value)==1:
+		ans = 'The predicted \'wait\' value is '+str(value[0])
+		print(ans)
+	else:		
+		db.courses.aggregate([{'$unwind':"$sections"},
+		{'$match': {'$and': [{'code': {'$regex': re.compile(cc, re.IGNORECASE)}},{'sections.sectionId': {'$regex': re.compile(lectureNo, re.IGNORECASE)}}] }},
+		{'$project':{'code':1, 'credits':1,'sectionId':'$sections.sectionId','wait':'$sections.wait','enrol':'$sections.enrol','quota':'$sections.quota','sections.recordTime':1, 'timecheck': {'$lte': [ "$sections.recordTime", ts ] }}},
+		{'$match':{'timecheck':True}},
+		{'$sort':{'sections.recordTime':-1}},
+		{'$project':{'_id':0, 'code':1, 'credits':1,'sectionId':1,'enrol':1,'quota':1,'wait':1,'recordTime':'$sections.recordTime','timecheck':1}},
+		{'$out' : 'earlierDocuments' }])
+		
+		getOne = db.earlierDocuments.find().skip(0).limit(1);
+		getTwo = db.earlierDocuments.find().skip(0).limit(2);
+		getThree = db.earlierDocuments.find().skip(0).limit(3);
+		
+		#db.earlierDocuments.drop()
+		
+		model1array = []
+		model2array = []
+		model3array = []
+		for items1 in getOne:
+			model1array.append(items1['credits'])
+			model1array.append(items1['quota'])
+			model1array.append(items1['enrol'])
+		for items2 in getTwo:
+			model2array.append(items2['wait'])
+		for items3 in getThree:
+			model3array.append(items3['wait'])
+			
+		#flip array 2 and 3
+		model2array = model2array[::-1]
+		model3array = model3array[::-1]
+		
+		model1array = numpy.array(model1array)
+		model2array = numpy.array(model2array)
+		model3array = numpy.array(model3array)
+		model1array = model1array.reshape(1,3)
+		model2array = model2array.reshape(1,2)
+		model3array = model3array.reshape(1,3)
+		
+		numpy.savetxt("model1input.csv", model1array, delimiter=",")
+		numpy.savetxt("model2input.csv", model2array, delimiter=",")
+		numpy.savetxt("model3-5input.csv", model3array, delimiter=",")
+		
+		#first model prediction
+		with open('model1.json', "r") as f:
+			model_json = f.read()
+		model = model_from_json(model_json)
+		model.load_weights('model1.h5')
+		newX = numpy.loadtxt('model1input.csv', delimiter=",")
+		newX = newX.reshape(1,3)
+		newY1 = model.predict(newX, batch_size=50)
+		newY1 = newY1.reshape(1)
+
+
+		#second model prediction
+		with open('model2.json', "r") as f:
+			model_json = f.read()
+		model = model_from_json(model_json)
+		model.load_weights('model2.h5')
+		newX = numpy.loadtxt('model2input.csv', delimiter=",")
+		newX = newX.reshape(1,2)
+		newY2 = model.predict(newX, batch_size=5)
+		newY2 = newY2.reshape(1)
+
+
+		#third model prediction
+		with open('model3.json', "r") as f:
+			model_json = f.read()
+		model = model_from_json(model_json)
+		model.load_weights('model3.h5')
+		newX = numpy.loadtxt('model3-5input.csv', delimiter=",")
+		newX = newX.reshape(1,3)
+		newY3 = model.predict(newX, batch_size=50)
+		newY3 = newY3.reshape(1)
+
+
+		#fourth model prediction
+		with open('model4.json', "r") as f:
+			model_json = f.read()
+		model = model_from_json(model_json)
+		model.load_weights('model4.h5')
+		newX = numpy.loadtxt('model3-5input.csv', delimiter=",")
+		newX = newX.reshape(1,3,1)
+		newY4 = model.predict(newX, batch_size=50)
+		newY4 = newY4.reshape(1)
+
+
+		#fifth model prediction
+		with open('model5.json', "r") as f:
+			model_json = f.read()
+		model = model_from_json(model_json)
+		model.load_weights('model5.h5')
+		newX = numpy.loadtxt('model3-5input.csv', delimiter=",")
+		newX = newX.reshape(1,3,1)
+		newY5 = model.predict(newX, batch_size=50)
+		newY5 = newY5.reshape(1)
+
+		
+		print('predicted values of model 1-5:')
+		print(int(newY1),',',int(newY2),',',int(newY3),',',int(newY4),',',int(newY5))
 
 # 5.5
 def  waitingListSizeTraining():
@@ -565,7 +670,7 @@ def  waitingListSizeTraining():
 	'''
 	
 	
-	#get wait number with lookback3 for model 3
+	#get wait number with lookback=3 for model 3,4,5
 	'''
 	results4=db.courses.aggregate([{'$unwind':"$sections"},
 	{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
@@ -667,6 +772,56 @@ def  waitingListSizeTraining():
 	with open('model3.json', "w") as f:
 	    f.write(model_json)
 	model.save_weights('model3.h5')
+	'''
+	
+	#model 4
+	'''
+	print('training model 4')
+	numpy.random.seed(int(time.time()))
+	dataset = numpy.loadtxt('thirdTrain.csv', delimiter=",")
+	X = dataset[:,0:3]
+	X = X.reshape(9834,3,1)
+	Y = dataset[:,3]
+	model = Sequential()
+	model.add(LSTM(10, input_shape=(3,1)))
+	model.add(Dense(8, activation='relu'))
+	model.add(Dense(1, activation='relu'))
+	keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0)#, amsgrad=False)
+	model.compile(loss="mae", optimizer="adam", metrics=["accuracy"])
+	#earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=0, verbose=0, mode='auto')
+	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=50)#, callbacks=[earlyStopping])
+	scores = model.evaluate(X, Y)
+	print("")
+	print("{}: {}".format(model.metrics_names[1], scores[1]*100))
+	model_json = model.to_json()
+	with open('model4.json', "w") as f:
+	    f.write(model_json)
+	model.save_weights('model4.h5')
+	'''
+	
+	#model 5
+	'''
+	print('training model 5')
+	numpy.random.seed(int(time.time()))
+	dataset = numpy.loadtxt('thirdTrain.csv', delimiter=",")
+	X = dataset[:,0:3]
+	X = X.reshape(9834,3,1)
+	Y = dataset[:,3]
+	model = Sequential()
+	model.add(GRU(10, input_shape=(3,1)))
+	model.add(Dense(8, activation='relu'))
+	model.add(Dense(1, activation='relu'))
+	keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0)#, amsgrad=False)
+	model.compile(loss="mae", optimizer="adam", metrics=["accuracy"])
+	#earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=0, verbose=0, mode='auto')
+	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=50)#, callbacks=[earlyStopping])
+	scores = model.evaluate(X, Y)
+	print("")
+	print("{}: {}".format(model.metrics_names[1], scores[1]*100))
+	model_json = model.to_json()
+	with open('model5.json', "w") as f:
+	    f.write(model_json)
+	model.save_weights('model5.h5')
 	'''
 	
 	print("Waiting list size training is successful")
