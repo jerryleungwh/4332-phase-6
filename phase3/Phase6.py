@@ -534,7 +534,8 @@ def  waitingListSizeTraining():
 	'''
 	
 	
-	#get wait number with lookback for model 2
+	#get wait number with lookback=2 for model 2
+	'''
 	results3=db.courses.aggregate([{'$unwind':"$sections"},
 	{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
 	{'$project':{'sectionId':'$sections.sectionId','code':1,'wait':'$sections.wait','_id':0}},
@@ -561,9 +562,44 @@ def  waitingListSizeTraining():
 	waitArray = waitArray.reshape(int(len(temp)/3),3)
 
 	numpy.savetxt("secondTrain.csv", waitArray, delimiter=",")
+	'''
+	
+	
+	#get wait number with lookback3 for model 3
+	'''
+	results4=db.courses.aggregate([{'$unwind':"$sections"},
+	{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
+	{'$project':{'sectionId':'$sections.sectionId','code':1,'wait':'$sections.wait','_id':0}},
+	{'$match': {'sectionId': {'$regex': re.compile('^L.', re.IGNORECASE)}}},
+	{'$project':{'sectionId':1,'code':1,'wait':1,'_id':0}}])
+
+	temp = []
+	codes = []
+	sectionIds = []
+	waits = []
+
+	for items in results4:
+		codes.append(str(items['code']))
+		sectionIds.append(str(items['sectionId']))
+		waits.append(int(items['wait']))
+		
+	for i in range(2,len(codes)):
+		if codes[i]==codes[i-1] and codes[i]==codes[i-2] and codes[i]==codes[i-3] and sectionIds[i]==sectionIds[i-1] and sectionIds[i]==sectionIds[i-2] and sectionIds[i]==sectionIds[i-3]:
+			temp.append(waits[i-3])
+			temp.append(waits[i-2])
+			temp.append(waits[i-1])
+			temp.append(waits[i])
+		
+	waitArray = numpy.array(temp)
+	waitArray = waitArray.reshape(int(len(temp)/4),4)
+
+	numpy.savetxt("thirdTrain.csv", waitArray, delimiter=",")
+	'''
+	
 	
 	#model 1
 	'''
+	print('training model 1')
 	numpy.random.seed(int(time.time()))
 	dataset = numpy.loadtxt('firstTrain.csv', delimiter=",")
 	X = dataset[:,0:3]
@@ -573,7 +609,7 @@ def  waitingListSizeTraining():
 	model.add(Dense(8, activation='relu'))
 	model.add(Dense(1, activation='relu'))
 	keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0)#, amsgrad=False)
-	model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
+	model.compile(loss="mae", optimizer="adam", metrics=["accuracy"])
 	#earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=0, verbose=0, mode='auto')
 	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=50)#, callbacks=[earlyStopping])
 	scores = model.evaluate(X, Y)
@@ -584,7 +620,9 @@ def  waitingListSizeTraining():
 	    f.write(model_json)
 	model.save_weights('model1.h5')
 	'''
+
 	#model 2
+	'''
 	print('training model 2')
 	numpy.random.seed(int(time.time()))
 	dataset = numpy.loadtxt('secondTrain.csv', delimiter=",")
@@ -595,9 +633,9 @@ def  waitingListSizeTraining():
 	model.add(Dense(8, activation='relu'))
 	model.add(Dense(1, activation='relu'))
 	keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0)#, amsgrad=False)
-	model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
+	model.compile(loss="mse", optimizer="adam", metrics=["accuracy"])
 	#earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=0, verbose=0, mode='auto')
-	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=50)#, callbacks=[earlyStopping])
+	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=5)#, callbacks=[earlyStopping])
 	scores = model.evaluate(X, Y)
 	print("")
 	print("{}: {}".format(model.metrics_names[1], scores[1]*100))
@@ -605,24 +643,36 @@ def  waitingListSizeTraining():
 	with open('model2.json', "w") as f:
 	    f.write(model_json)
 	model.save_weights('model2.h5')
+	'''
 	
+	#model 3
+	'''
+	print('training model 3')
+	numpy.random.seed(int(time.time()))
+	dataset = numpy.loadtxt('thirdTrain.csv', delimiter=",")
+	X = dataset[:,0:3]
+	Y = dataset[:,3]
+	model = Sequential()
+	model.add(Dense(12, input_dim=3, activation='relu'))
+	model.add(Dense(8, activation='relu'))
+	model.add(Dense(1, activation='relu'))
+	keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0)#, amsgrad=False)
+	model.compile(loss="mae", optimizer="adam", metrics=["accuracy"])
+	#earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=0, verbose=0, mode='auto')
+	model.fit(X, Y, validation_split=0.2, epochs=150, batch_size=50)#, callbacks=[earlyStopping])
+	scores = model.evaluate(X, Y)
+	print("")
+	print("{}: {}".format(model.metrics_names[1], scores[1]*100))
+	model_json = model.to_json()
+	with open('model3.json', "w") as f:
+	    f.write(model_json)
+	model.save_weights('model3.h5')
+	'''
 	
 	print("Waiting list size training is successful")
 
 	
 	
-	
-
-'''
-def shuffler(filename,outputfilename):
-	df = pandas.read_csv(filename, header=0)
-	# return the pandas dataframe
-	file = df.reindex(numpy.random.permutation(df.index))
-	file.to_csv(outputfilename, sep=',')
-'''
-
-
-
 
 
 

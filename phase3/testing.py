@@ -19,6 +19,7 @@ db = client['hkust']
 
 #get wait number with lookback
 results3=db.courses.aggregate([{'$unwind':"$sections"},
+{'$match': {'$or': [{'code': {'$regex': re.compile('^COMP1942', re.IGNORECASE)}}, {'code': {'$regex': re.compile('^COMP42', re.IGNORECASE)}},{'code': {'$regex': re.compile('^COMP43', re.IGNORECASE)}},{'code': {'$regex': re.compile('^RMBI', re.IGNORECASE)}}] }},
 {'$project':{'sectionId':'$sections.sectionId','code':1,'wait':'$sections.wait','_id':0}},
 {'$match': {'sectionId': {'$regex': re.compile('^L.', re.IGNORECASE)}}},
 {'$project':{'sectionId':1,'code':1,'wait':1,'_id':0}}])
@@ -34,12 +35,13 @@ for items in results3:
 	waits.append(int(items['wait']))
 	
 for i in range(2,len(codes)):
-	if codes[i]==codes[i-1] and codes[i]==codes[i-2] and sectionIds[i]==sectionIds[i-1] and sectionIds[i]==sectionIds[i-2]:
+	if codes[i]==codes[i-1] and codes[i]==codes[i-2] and codes[i]==codes[i-3] and sectionIds[i]==sectionIds[i-1] and sectionIds[i]==sectionIds[i-2] and sectionIds[i]==sectionIds[i-3]:
+		temp.append(waits[i-3])
 		temp.append(waits[i-2])
 		temp.append(waits[i-1])
 		temp.append(waits[i])
 	
 waitArray = numpy.array(temp)
-waitArray = waitArray.reshape(int(len(temp)/3),3)
+waitArray = waitArray.reshape(int(len(temp)/4),4)
 
-numpy.savetxt("foo.csv", waitArray, delimiter=",")
+numpy.savetxt("thirdTrain.csv", waitArray, delimiter=",")
