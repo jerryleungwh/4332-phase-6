@@ -90,6 +90,7 @@ def main():
 # 5.1
 def dropAndEmptySuccessful():
 	# checking should be done
+	db.courses.drop()
 	print("Collection dropping and empty collection creating are successful")
 
 # 5.2
@@ -136,7 +137,7 @@ def courseSearch():
 			except ValueError:
 				print("Please input all values in correct format")
 
-		newFunction(f = 0.05, start =datetime(2018, 2, 1, 11, 0), end = datetime(2018,2,10 ,12, 0 ))
+		waitingListSearch(f, start_ts, end_ts)
 	else:
 		print("Please enter a valid choice\n")
 
@@ -179,7 +180,7 @@ def keywordSearch(query):
 
 	for instance in results:
 		print(instance)
-
+'''
 def newFunction(f, start, end):
 	#print(start)
 	#print(end )
@@ -329,106 +330,130 @@ def printACourse(courseDetails):
 		print('\tWait', section[7])
 		print('\n')
 	print('\n')
+''' 
 
 # need testing
-"""
+
 def waitingListSearch(f, start, end):
-	db.course2.aggregate([
-	{'$unwind':"$TimeList"},
-	{'$project':{'_id':0,'Cname':1,'TimeList':1}},
-	{'$unwind':"$TimeList.SectionList"},
+	
+	result = db.courses.aggregate([
+	{'$unwind':"$sections"},
+	{'$project':{'_id':0,'code':1,'credits':1,'Matched Time Slot':'$sections.recordTime','title':1,'sections':1}},
 	{'$project':{
 		'_id':0,
-		'Cname':1,
-		"TimeList.timeslot":1,
-		"TimeList.SectionList.section":1,
-		"TimeList.SectionList.date_time":1,
-		"TimeList.SectionList.quota":1,
-		"TimeList.SectionList.enrol":1,
-		"TimeList.SectionList.available":1,
-		"TimeList.SectionList.wait":1,
-		"fenrol":{'$multiply':[f,"$TimeList.SectionList.enrol"]}}},
+		'code':1,
+		'credits':1,
+		'Matched Time Slot':1,
+		'title':1,
+		"sections.recordTime":1,
+		"sections.sectionId":1,
+		"sections.dateAndTime":"$sections.offerings.dateAndTime",
+		"sections.quota":1,
+		"sections.enrol":1,
+		"sections.Avail":{'$subtract': ["$sections.quota","$sections.enrol"] },
+		"sections.wait":1,
+		#compute the f * enrol for later use
+		"fenrol":{'$multiply':[f,"$sections.enrol"]}}},
+	
+	
 	{'$project':{
 		'_id':0,
-		'Cname':1,
-		"TimeList.timeslot":1,
-		"TimeList.SectionList.section":1,
-		"TimeList.SectionList.date_time":1,
-		"TimeList.SectionList.quota":1,
-		"TimeList.SectionList.enrol":1,
-		"TimeList.SectionList.available":1,
-		"TimeList.SectionList.wait":1,
+		'code':1,
+		'credits':1,
+		'Matched Time Slot':1,
+		'title':1,
+		"sections.recordTime":1,
+		"sections.sectionId":1,
+		"sections.dateAndTime":1,
+		"sections.quota":1,
+		"sections.enrol":1,
+		"sections.Avail":1,
+		"sections.wait":1,
 		"fenrol":1,
-		"TimeList.SectionList.Satisfied":{
+		#check if the required condition is saitified, adding the new attribute
+		"sections.Satisfied":{
 			'$cond':{
 				'if':{
-					'$gte': ["$TimeList.SectionList.wait", "$fenrol"]
+					'$gte': ["$sections.wait", "$fenrol"]
 				},
 				'then': "Yes",
 				'else': "No",
 			}
 		}
 	}},
+	
+	
 	{'$project':{
 		'_id':0,
-		"Cname":1,
-		"timeslot":"$TimeList.timeslot",
-		"List.section":"$TimeList.SectionList.section",
-		"List.date_time":"$TimeList.SectionList.date_time",
-		"List.quota":"$TimeList.SectionList.quota",
-		"List.enrol":"$TimeList.SectionList.enrol",
-		"List.available":"$TimeList.SectionList.available",
-		"List.wait":"$TimeList.SectionList.wait",
-		"List.Satisfied":"$TimeList.SectionList.Satisfied"
+		"title":1,
+		"recordTime":"$sections.recordTime",
+		"List.sectionId":"$sections.sectionId",
+		"List.dateAndTime":"$sections.dateAndTime",
+		"List.quota":"$sections.quota",
+		"List.enrol":"$sections.enrol",
+		"List.Avail":"$sections.Avail",
+		"List.wait":"$sections.wait",
+		"List.Satisfied":"$sections.Satisfied"
 	}},
 	{'$group':{
 		"_id":{
-			"Cname":"$Cname",
-			"timeslot":"$timeslot"
+			"title":"$title",
+			"recordTime":"$recordTime"
 		},
 		"List":{'$push':{"List":"$List"}}
 
 	}},
 	{'$project':{
 		'_id':0,
-		"Cname":"$_id.Cname",
-		"timeslot":"$_id.timeslot",
+		"title":"$_id.title",
+		"recordTime":"$_id.recordTime",
 		"List":"$List.List"
 
 	}},
+	#output to a new collection for later use
 	{'$out':"allWithStatisfied"}
-	]
+	],allowDiskUse=True
 	)
-
-
-	results = db.course2.aggregate([
-	{'$unwind':"$TimeList"},
-	{'$project': {'Course_Code':1, 'Cname':1, 'Units':1, '_id':0, 'TimeList':1, 'greater_than_start': {'$gte': ["$TimeList.timeslot", start]} ,'less_than_end': {'$lte': ["$TimeList.timeslot", end]}}},
-	{'$match': {'greater_than_start':'true'}},
-	{'$match': {'less_than_end':'true'}},
-	{'$unwind':"$TimeList.SectionList"},
-	{'$match': {"TimeList.SectionList.section":'/^L/i'}},
-	{'$project': {'Course_Code':1, 'Cname':1, 'Units':1, '_id':0, 'TimeList':1, 'wait_list_fulfilled': {'$gte': ["$TimeList.SectionList.wait", { '$multiply': [ "$TimeList.SectionList.enrol", f ] }]}}},
-	{'$match': {'wait_list_fulfilled':'true'}},
-	{'$sort':{'Cname':-1,"TimeList.timeslot":-1}},
+	
+	
+	
+	results2 = db.courses.aggregate([
+	{'$unwind':"$sections"},
+	#//match the recordTime(Date object) twice to filter out only the time within the range using the gte and lte operations
+	{'$project': {'code':1, 'title':1, 'credits':1, '_id':0, 'sections':1, 'greater_than_start': {'$gte': ["$sections.recordTime", start]} ,'less_than_end': {'$lte': ["$sections.recordTime", end]}}},
+	{'$match': {'greater_than_start':True}},
+	{'$match': {'less_than_end':True}},
+	#//match only the section of object is Lecture using regular expression, as required
+	{'$match': {'sections.sectionId': {'$regex': re.compile('^L', re.IGNORECASE)}}},
+	
+	#	//would match again to keep only the section that match the waitlist requirement (i.e. the number of students in the waiting list of this lecture section is greater than or equal to f multiplied by the number of students enrolled in this lecture section in that time slot.)
+	#//The initial value of f is hardcoded as 0.05.
+	{'$project':{'code':1, 'title':1, 'credits':1, '_id':0, 'sections':1,"fenrol":{'$multiply':[f,"$sections.enrol"]}}},
+	{'$project': {'code':1, 'title':1, 'credits':1, '_id':0, 'sections':1, 'wait_list_fulfilled': {'$gte': ["$sections.wait", "$fenrol"]}}},
+	{'$match': {'wait_list_fulfilled':True}},
+	#	//to retrieve the most updated information, we order it in descedning order; the $first operation can get the most updated info
+	#//$first is a feature that returns the value that results from applying an expression to the first document in a group of documents that share the same group by key. Only meaningful when documents are in a defined order.
+	{'$sort':{'title':-1,"sections.recordTime":-1}},
 	{'$group':{
-		"_id": "$Course_Code",
-		"CourseTitle": {"$first": "$Cname"},
-		"NoOfUnits": {"$first": "$Units"},
-		"MatchedTimeSlot": {"$first": "$TimeList.timeslot"}
+		"_id": "$code",
+		"CourseTitle": {"$first": "$title"},
+		"NoOfcredits": {"$first": "$credits"},
+		"MatchedrecordTime": {"$first": "$sections.recordTime"}
 		}
 	},
+	#//lookup the information of the course_section that fulfill the waitlist requirement from the "All" document we outputted at the beginning
+	#//used a complicated operation, joining them using two attributes i.e. course name and recordTime. 
 	{'$lookup':
 		{
-			'from': "all",
-			'let':{'time':"$MatchedTimeSlot",'name':"$CourseTitle"},
+			'from': "allWithStatisfied",
+			'let':{'time':"$MatchedrecordTime",'name':"$CourseTitle"},
 			'pipeline':[
 				{'$match':
 					{'$expr':
 						{'$and':
 							[
-							{'$eq':["$Cname", "$$name"]},
-							{'$eq':["$TimeList.timeslot", "$$time"]}
+							{'$eq':["$title", "$$name"]},
+							{'$eq':["$recordTime", "$$time"]}
 							]
 						}
 					}
@@ -437,11 +462,17 @@ def waitingListSearch(f, start, end):
 			'as': "course_info"
 		}
 	},
-	{'$project':{'_id':1,'CourseTitle':1,'NoOfUnits':1,'MatchedTimeSlot':1,'SectionList':"$course_info.TimeList.SectionList"}},
-	{'$project':{'_id':1,'CourseTitle':1,'NoOfUnits':1,'MatchedTimeSlot':1,"SectionList.section":1,"SectionList.date_time":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.available":1,"SectionList.wait":1}}
+	#output the information as required
+	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':1,'MatchedrecordTime':1,'SectionList':"$course_info.List"}},
+	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,'Matched Time Slot':'$MatchedrecordTime',"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
 	])
-"""
+	
 
+	
+	for items in results2:
+		pprint.pprint(items)
+
+	db.allWithStatisfied.drop()
 
 
 def printAllMatched(matchedCourseDetails):
@@ -601,7 +632,8 @@ def waitingListSizePrediction(cc, ln, ts):
 		
 		print('predicted values of model 1-5:')
 		print(int(newY1),',',int(newY2),',',int(newY3),',',int(newY4),',',int(newY5))
-
+		
+		db.earlierDocuments.drop()
 # 5.5
 def  waitingListSizeTraining():
 
