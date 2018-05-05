@@ -17,10 +17,8 @@ client = MongoClient('mongodb://localhost:27017')
 db = client['hkust']
 
 
-def newFunction(f, start, end):
-	#print(start)
-	#print(end )
-	'''
+def waitingListSearch(f, start, end):
+	
 	result = db.courses.aggregate([
 	{'$unwind':"$sections"},
 	{'$project':{'_id':0,'code':1,'credits':1,'Matched Time Slot':'$sections.recordTime','title':1,'sections':1}},
@@ -70,7 +68,7 @@ def newFunction(f, start, end):
 	
 	{'$project':{
 		'_id':0,
-		"title":1,
+		"code":1,
 		"recordTime":"$sections.recordTime",
 		"List.sectionId":"$sections.sectionId",
 		"List.dateAndTime":"$sections.dateAndTime",
@@ -82,7 +80,7 @@ def newFunction(f, start, end):
 	}},
 	{'$group':{
 		"_id":{
-			"title":"$title",
+			"code":"$code",
 			"recordTime":"$recordTime"
 		},
 		"List":{'$push':{"List":"$List"}}
@@ -90,7 +88,7 @@ def newFunction(f, start, end):
 	}},
 	{'$project':{
 		'_id':0,
-		"title":"$_id.title",
+		"code":"$_id.code",
 		"recordTime":"$_id.recordTime",
 		"List":"$List.List"
 
@@ -99,7 +97,7 @@ def newFunction(f, start, end):
 	{'$out':"allWithStatisfied"}
 	],allowDiskUse=True
 	)
-	'''
+	
 	
 	
 	results2 = db.courses.aggregate([
@@ -131,13 +129,13 @@ def newFunction(f, start, end):
 	{'$lookup':
 		{
 			'from': "allWithStatisfied",
-			'let':{'time':"$MatchedrecordTime",'name':"$CourseTitle"},
+			'let':{'time':"$MatchedrecordTime",'courseCode':"$_id"},
 			'pipeline':[
 				{'$match':
 					{'$expr':
 						{'$and':
 							[
-							{'$eq':["$title", "$$name"]},
+							{'$eq':["$code", "$$courseCode"]},
 							{'$eq':["$recordTime", "$$time"]}
 							]
 						}
@@ -152,17 +150,15 @@ def newFunction(f, start, end):
 	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,'Matched Time Slot':'$MatchedrecordTime',"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
 	])
 	
-	
+
 	
 	for items in results2:
 		pprint.pprint(items)
-		
-		
-		
+
+	db.allWithStatisfied.drop()
 		
 		
 start_ts = datetime.strptime('2018-01-26 10:00', "%Y-%m-%d %H:%M")
 
-end_ts = datetime.strptime('2018-01-26 13:00', "%Y-%m-%d %H:%M")
-
-newFunction(0.5, start_ts, end_ts)
+end_ts = datetime.strptime('2018-01-26 13:00', "%Y-%m-%d %H:%M")		
+waitingListSearch(0.5, start_ts, end_ts)

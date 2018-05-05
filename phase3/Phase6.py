@@ -119,7 +119,7 @@ def courseSearch():
 
 	# keyword search
 	if choice == "1":
-		query = input("Please enter your keyword  (you may enter \"Data\" for testing)")
+		query = input("Please enter your keyword  (you may enter \"Data\" for testing) ")
 		keywordSearch(query)
 	#waitlist search
 	elif choice == "2":
@@ -155,31 +155,125 @@ def keywordSearch(query):
 	#print(re.sub(r"""[,;.?:'"/\&+-+*!()]""", " ", query).split())
 
 	query = convertToRE(query)
+	
+	
+	result = db.courses.aggregate([
+	{'$unwind':"$sections"},
+	{'$project':{'_id':0,'code':1,'credits':1,'Matched Time Slot':'$sections.recordTime','title':1,'sections':1}},
+	{'$project':{
+		'_id':0,
+		'code':1,
+		'credits':1,
+		'Matched Time Slot':1,
+		'title':1,
+		"sections.recordTime":1,
+		"sections.sectionId":1,
+		"sections.dateAndTime":"$sections.offerings.dateAndTime",
+		"sections.quota":1,
+		"sections.enrol":1,
+		"sections.Avail":{'$subtract': ["$sections.quota","$sections.enrol"] },
+		"sections.wait":1,
+		#compute the f * enrol for later use
+	}},
+	
+	
+	{'$project':{
+		'_id':0,
+		'code':1,
+		'credits':1,
+		'Matched Time Slot':1,
+		'title':1,
+		"sections.recordTime":1,
+		"sections.sectionId":1,
+		"sections.dateAndTime":1,
+		"sections.quota":1,
+		"sections.enrol":1,
+		"sections.Avail":1,
+		"sections.wait":1,
+		"fenrol":1,
+		#check if the required condition is saitified, adding the new attribute
 
-	results = db.course.aggregate([
-	#match the course according to the specified requirement, we are using regular expression to check if the Cname in the database contains the phrase(s) in the query
-	{'$match': {"Cname": {"$regex": query}}},
-	{'$unwind':"$TimeList"},
-	{'$project': {"Course_Code":1, "Cname":1, "Units":1, "_id":0, "TimeList.timeslot":1, "TimeList.SectionList":1}},
-	#to retrieve the section details in TimeList which has the largest timeslot, we reorder it in descending order
-	#by using the $first operation we get the timeslot with latest date, which contains the most updated information
-	#$first is a feature that returns the value that results from applying an expression to the first document in a group of documents that share the same group by key. Only meaningful when documents are in a defined order.
-	{'$sort':{"Cname":-1,"TimeList.timeslot":-1}},
+	}},
+	
+	
+	{'$project':{
+		'_id':0,
+		"code":1,
+		"recordTime":"$sections.recordTime",
+		"List.sectionId":"$sections.sectionId",
+		"List.dateAndTime":"$sections.dateAndTime",
+		"List.quota":"$sections.quota",
+		"List.enrol":"$sections.enrol",
+		"List.Avail":"$sections.Avail",
+		"List.wait":"$sections.wait",
+	}},
 	{'$group':{
-		"_id": "$Course_Code",
-		"CourseTitle": {"$first": "$Cname"},
-		"NoOfUnits": {"$first": "$Units"},
-		"TimeSlot": {"$first": "$TimeList.timeslot"},
-		"SectionList": {"$first": "$TimeList.SectionList"}
+		"_id":{
+			"code":"$code",
+			"recordTime":"$recordTime"
+		},
+		"List":{'$push':{"List":"$List"}}
+
+	}},
+	{'$project':{
+		'_id':0,
+		"code":"$_id.code",
+		"recordTime":"$_id.recordTime",
+		"List":"$List.List"
+
+	}},
+	#output to a new collection for later use
+	{'$out':"allCoursesByrecordTime"}
+	],allowDiskUse=True
+	)
+	
+	
+	results = db.courses.aggregate([
+	#match the course according to the specified requirement, we are using regular expression to check if the title in the database contains the phrase(s) in the query
+	{'$match':  {'$or': [{"title": {"$regex": query}},{"title": {"$regex": query}},{"sections.remarks": {"$regex": query}}]}},
+	{'$project': {"code":1, "title":1, "credits":1, "_id":0, "sections":1}},
+	{'$unwind':"$sections"},
+	#to retrieve the section details in sections which has the largest recordTime, we reorder it in descending order
+	#by using the $first operation we get the recordTime with latest date, which contains the most updated information
+	#$first is a feature that returns the value that results from applying an expression to the first document in a group of documents that share the same group by key. Only meaningful when documents are in a defined order.
+	{'$sort':{"title":-1,"sections.recordTime":-1}},
+	{'$group':{
+		"_id": "$code",
+		"CourseTitle": {"$first": "$title"},
+		"NoOfcredits": {"$first": "$credits"},
+		"MatchedrecordTime": {"$first": "$sections.recordTime"}
+		}
+	},
+	{'$lookup':
+		{
+			'from': "allCoursesByrecordTime",
+			'let':{'time':"$MatchedrecordTime",'courseCode':"$_id"},
+			'pipeline':[
+				{'$match':
+					{'$expr':
+						{'$and':
+							[
+							{'$eq':["$code", "$$courseCode"]},
+							{'$eq':["$recordTime", "$$time"]}
+							]
+						}
+					}
+				}
+				],
+			'as': "course_info"
 		}
 	},
 	#output in the return format as required
-	{'$project': {"_id":1, "CourseTitle":1, "NoOfUnits":1, "MatchedTimeSlot":1, "SectionList.section":1, "SectionList.date_time":1, "SectionList.quota":1, "SectionList.enrol":1, "SectionList.available":1, "SectionList.wait":1}},
-	{'$sort': {"_id":1} }
+	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':"$credits",'SectionList':"$course_info.List"}},
+	{'$sort':{'_id':1}},
+	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
 	])
 
 	for instance in results:
-		print(instance)
+		pprint.pprint(instance)
+		
+		
+	db.allCoursesByrecordTime.drop()
 '''
 def newFunction(f, start, end):
 	#print(start)
@@ -332,6 +426,10 @@ def printACourse(courseDetails):
 	print('\n')
 ''' 
 
+	
+	
+	
+	
 # need testing
 
 def waitingListSearch(f, start, end):
@@ -385,7 +483,7 @@ def waitingListSearch(f, start, end):
 	
 	{'$project':{
 		'_id':0,
-		"title":1,
+		"code":1,
 		"recordTime":"$sections.recordTime",
 		"List.sectionId":"$sections.sectionId",
 		"List.dateAndTime":"$sections.dateAndTime",
@@ -397,7 +495,7 @@ def waitingListSearch(f, start, end):
 	}},
 	{'$group':{
 		"_id":{
-			"title":"$title",
+			"code":"$code",
 			"recordTime":"$recordTime"
 		},
 		"List":{'$push':{"List":"$List"}}
@@ -405,7 +503,7 @@ def waitingListSearch(f, start, end):
 	}},
 	{'$project':{
 		'_id':0,
-		"title":"$_id.title",
+		"code":"$_id.code",
 		"recordTime":"$_id.recordTime",
 		"List":"$List.List"
 
@@ -446,13 +544,13 @@ def waitingListSearch(f, start, end):
 	{'$lookup':
 		{
 			'from': "allWithStatisfied",
-			'let':{'time':"$MatchedrecordTime",'name':"$CourseTitle"},
+			'let':{'time':"$MatchedrecordTime",'courseCode':"$_id"},
 			'pipeline':[
 				{'$match':
 					{'$expr':
 						{'$and':
 							[
-							{'$eq':["$title", "$$name"]},
+							{'$eq':["$code", "$$courseCode"]},
 							{'$eq':["$recordTime", "$$time"]}
 							]
 						}
@@ -464,6 +562,7 @@ def waitingListSearch(f, start, end):
 	},
 	#output the information as required
 	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':1,'MatchedrecordTime':1,'SectionList':"$course_info.List"}},
+	{'$sort':{'_id':1}},
 	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,'Matched Time Slot':'$MatchedrecordTime',"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
 	])
 	
