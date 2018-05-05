@@ -230,7 +230,7 @@ def keywordSearch(query):
 	
 	results = db.courses.aggregate([
 	#match the course according to the specified requirement, we are using regular expression to check if the title in the database contains the phrase(s) in the query
-	{'$match':  {'$or': [{"title": {"$regex": query}},{"title": {"$regex": query}},{"sections.remarks": {"$regex": query}}]}},
+	{'$match':  {'$or': [{"title": {"$regex": query}},{"description": {"$regex": query}},{"sections.remarks": {"$regex": query}}]}},
 	{'$project': {"code":1, "title":1, "credits":1, "_id":0, "sections":1}},
 	{'$unwind':"$sections"},
 	#to retrieve the section details in sections which has the largest recordTime, we reorder it in descending order
