@@ -235,10 +235,10 @@ def keywordSearch(query):
 	
 	
 	results = db.courses.aggregate([
+	{'$unwind':"$sections"},
 	#match the course according to the specified requirement, we are using regular expression to check if the title in the database contains the phrase(s) in the query
 	{'$match':  {'$or': [{"title": {"$regex": query}},{"description": {"$regex": query}},{"sections.remarks": {"$regex": query}}]}},
 	{'$project': {"code":1, "title":1, "credits":1, "_id":0, "sections":1}},
-	{'$unwind':"$sections"},
 	#to retrieve the section details in sections which has the largest recordTime, we reorder it in descending order
 	#by using the $first operation we get the recordTime with latest date, which contains the most updated information
 	#$first is a feature that returns the value that results from applying an expression to the first document in a group of documents that share the same group by key. Only meaningful when documents are in a defined order.
@@ -274,8 +274,8 @@ def keywordSearch(query):
 	#output in the return format as required
 	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':"$credits",'SectionList':"$course_info.List"}},
 	{'$sort':{'_id':1}},
-	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,'_id':0}}
-	])
+	{'$project':{'Course Code':'$_id','CourseTitle':1,'NoOfcredits':1,"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,'_id':0}}
+	],allowDiskUse=True)
 
 	for instance in results:
 		pprint.pprint(instance)
@@ -576,8 +576,8 @@ def waitingListSearch(f, start, end):
 	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':1,'MatchedrecordTime':1,'SectionList':"$course_info.List"}},
 	#sort by course code
 	{'$sort':{'_id':1}},
-	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,'Matched Time Slot':'$MatchedrecordTime',"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
-	])
+	{'$project':{'Course Code':'$_id','CourseTitle':1,'NoOfcredits':1,'Matched Time Slot':'$MatchedrecordTime',"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
+	],allowDiskUse=True)
 	
 
 	
