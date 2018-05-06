@@ -154,6 +154,8 @@ def keywordSearch(query):
 	#matchedCourses = []
 	#print(re.sub(r"""[,;.?:'"/\&+-+*!()]""", " ", query).split())
 
+	
+	#convert query into regular expression
 	query = convertToRE(query)
 	
 	
@@ -171,7 +173,7 @@ def keywordSearch(query):
 		"sections.dateAndTime":"$sections.offerings.dateAndTime",
 		"sections.quota":1,
 		"sections.enrol":1,
-		"sections.Avail":{'$subtract': ["$sections.quota","$sections.enrol"] },
+		"sections.Avail":{'$subtract': ["$sections.quota","$sections.enrol"] },#get Avail from enrol and quota number
 		"sections.wait":1,
 		#compute the f * enrol for later use
 	}},
@@ -189,9 +191,9 @@ def keywordSearch(query):
 		"sections.quota":1,
 		"sections.enrol":1,
 		"sections.Avail":1,
-		"sections.wait":1,
-		"fenrol":1,
-		#check if the required condition is saitified, adding the new attribute
+		"sections.wait":1
+		
+		#check if the required condition is satisfied, adding the new attribute
 
 	}},
 	
@@ -207,6 +209,9 @@ def keywordSearch(query):
 		"List.Avail":"$sections.Avail",
 		"List.wait":"$sections.wait",
 	}},
+	#sort by section ID
+	{'$sort':{'List.sectionId':1}},
+	#group sections info by each course code and record time pair
 	{'$group':{
 		"_id":{
 			"code":"$code",
@@ -215,6 +220,7 @@ def keywordSearch(query):
 		"List":{'$push':{"List":"$List"}}
 
 	}},
+	#pull list up a layer from a nested structure
 	{'$project':{
 		'_id':0,
 		"code":"$_id.code",
@@ -222,7 +228,7 @@ def keywordSearch(query):
 		"List":"$List.List"
 
 	}},
-	#output to a new collection for later use
+	#output info by each course code and record time pair to a new collection for later use
 	{'$out':"allCoursesByrecordTime"}
 	],allowDiskUse=True
 	)
@@ -237,6 +243,7 @@ def keywordSearch(query):
 	#by using the $first operation we get the recordTime with latest date, which contains the most updated information
 	#$first is a feature that returns the value that results from applying an expression to the first document in a group of documents that share the same group by key. Only meaningful when documents are in a defined order.
 	{'$sort':{"title":-1,"sections.recordTime":-1}},
+	#get courses from the latest timeslot which fulfilled requirements
 	{'$group':{
 		"_id": "$code",
 		"CourseTitle": {"$first": "$title"},
@@ -244,6 +251,7 @@ def keywordSearch(query):
 		"MatchedrecordTime": {"$first": "$sections.recordTime"}
 		}
 	},
+	#merge to get back section info
 	{'$lookup':
 		{
 			'from': "allCoursesByrecordTime",
@@ -266,7 +274,7 @@ def keywordSearch(query):
 	#output in the return format as required
 	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':"$credits",'SectionList':"$course_info.List"}},
 	{'$sort':{'_id':1}},
-	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
+	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,'_id':0}}
 	])
 
 	for instance in results:
@@ -493,6 +501,9 @@ def waitingListSearch(f, start, end):
 		"List.wait":"$sections.wait",
 		"List.Satisfied":"$sections.Satisfied"
 	}},
+	#sort by section ID
+	{'$sort':{'List.sectionId':1}},
+	#group sections info by each course code and record time pair
 	{'$group':{
 		"_id":{
 			"code":"$code",
@@ -501,6 +512,7 @@ def waitingListSearch(f, start, end):
 		"List":{'$push':{"List":"$List"}}
 
 	}},
+	#pull list up a layer from a nested structure
 	{'$project':{
 		'_id':0,
 		"code":"$_id.code",
@@ -508,7 +520,7 @@ def waitingListSearch(f, start, end):
 		"List":"$List.List"
 
 	}},
-	#output to a new collection for later use
+	#output info by each course code and record time pair to a new collection for later use
 	{'$out':"allWithStatisfied"}
 	],allowDiskUse=True
 	)
@@ -522,7 +534,7 @@ def waitingListSearch(f, start, end):
 	{'$match': {'greater_than_start':True}},
 	{'$match': {'less_than_end':True}},
 	#//match only the section of object is Lecture using regular expression, as required
-	{'$match': {'sections.sectionId': {'$regex': re.compile('^L', re.IGNORECASE)}}},
+	{'$match': {'sections.sectionId': {'$regex': re.compile('^L[0-9]', re.IGNORECASE)}}},
 	
 	#	//would match again to keep only the section that match the waitlist requirement (i.e. the number of students in the waiting list of this lecture section is greater than or equal to f multiplied by the number of students enrolled in this lecture section in that time slot.)
 	#//The initial value of f is hardcoded as 0.05.
@@ -562,6 +574,7 @@ def waitingListSearch(f, start, end):
 	},
 	#output the information as required
 	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':1,'MatchedrecordTime':1,'SectionList':"$course_info.List"}},
+	#sort by course code
 	{'$sort':{'_id':1}},
 	{'$project':{'Course Code':'$_id','CourseTitle':1,'No Of credits':1,'Matched Time Slot':'$MatchedrecordTime',"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,"SectionList.Satisfied":1,'_id':0}}
 	])
@@ -730,7 +743,7 @@ def waitingListSizePrediction(cc, ln, ts):
 
 		
 		print('predicted values of model 1-5:')
-		print(int(newY1),',',int(newY2),',',int(newY3),',',int(newY4),',',int(newY5))
+		print(numpy.round(newY1),',',numpy.round(newY2),',',numpy.round(newY3),',',numpy.round(newY4),',',numpy.round(newY5))
 		
 		db.earlierDocuments.drop()
 # 5.5
