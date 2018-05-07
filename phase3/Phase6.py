@@ -272,7 +272,7 @@ def keywordSearch(query):
 		}
 	},
 	#output in the return format as required
-	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':"$credits",'SectionList':"$course_info.List"}},
+	{'$project':{'_id':1,'CourseTitle':1,'NoOfcredits':1,'SectionList':"$course_info.List"}},
 	{'$sort':{'_id':1}},
 	{'$project':{'Course Code':'$_id','CourseTitle':1,'NoOfcredits':1,"SectionList.sectionId":1,"SectionList.dateAndTime":1,"SectionList.quota":1,"SectionList.enrol":1,"SectionList.Avail":1,"SectionList.wait":1,'_id':0}}
 	],allowDiskUse=True)
