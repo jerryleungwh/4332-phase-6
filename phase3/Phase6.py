@@ -179,23 +179,23 @@ def keywordSearch(query):
 	}},
 	
 	
-	{'$project':{
-		'_id':0,
-		'code':1,
-		'credits':1,
-		'Matched Time Slot':1,
-		'title':1,
-		"sections.recordTime":1,
-		"sections.sectionId":1,
-		"sections.dateAndTime":1,
-		"sections.quota":1,
-		"sections.enrol":1,
-		"sections.Avail":1,
-		"sections.wait":1
+	# {'$project':{
+	# 	'_id':0,
+	# 	'code':1,
+	# 	'credits':1,
+	# 	'Matched Time Slot':1,
+	# 	'title':1,
+	# 	"sections.recordTime":1,
+	# 	"sections.sectionId":1,
+	# 	"sections.dateAndTime":1,
+	# 	"sections.quota":1,
+	# 	"sections.enrol":1,
+	# 	"sections.Avail":1,
+	# 	"sections.wait":1
 		
-		#check if the required condition is satisfied, adding the new attribute
+	# 	#check if the required condition is satisfied, adding the new attribute
 
-	}},
+	# }},
 	
 	
 	{'$project':{
@@ -551,8 +551,8 @@ def waitingListSearch(f, start, end):
 		"MatchedrecordTime": {"$first": "$sections.recordTime"}
 		}
 	},
-	#//lookup the information of the course_section that fulfill the waitlist requirement from the "All" document we outputted at the beginning
-	#//used a complicated operation, joining them using two attributes i.e. course name and recordTime. 
+	#//lookup the information of the course_section that fulfill the waitlist requirement from the "allWithStatisfied" document we outputted at the beginning
+	#//used a complicated operation, joining them using two attributes i.e. course code and recordTime. 
 	{'$lookup':
 		{
 			'from': "allWithStatisfied",
@@ -587,44 +587,44 @@ def waitingListSearch(f, start, end):
 	db.allWithStatisfied.drop()
 
 
-def printAllMatched(matchedCourseDetails):
-	for course in matchedCourseDetails:
-		printACourseWS(course[1])
+# def printAllMatched(matchedCourseDetails):
+# 	for course in matchedCourseDetails:
+# 		printACourseWS(course[1])
 
 
 
-def printACourseWS(courseDetails):
-	print('Course Code:', courseDetails[0])
-	print('Course Title', courseDetails[1])
-	print('No. of Units/Credits', courseDetails[2])
-	print('Matched Time Slot', courseDetails[-1])
-	for section in courseDetails[6]:
-		print('\nSection Details: ')
-		print('\tSection', section[0])
-		print('\tDate & Time', section[1])
-		print('\tQuota', section[4])
-		print('\tEnrol', section[5])
-		print('\tAvail', section[6])
-		print('\tWait', section[7])
-		print('\tSatisfied', section[9])
-		print('\n')
-	print('\n')
+# def printACourseWS(courseDetails):
+# 	print('Course Code:', courseDetails[0])
+# 	print('Course Title', courseDetails[1])
+# 	print('No. of Units/Credits', courseDetails[2])
+# 	print('Matched Time Slot', courseDetails[-1])
+# 	for section in courseDetails[6]:
+# 		print('\nSection Details: ')
+# 		print('\tSection', section[0])
+# 		print('\tDate & Time', section[1])
+# 		print('\tQuota', section[4])
+# 		print('\tEnrol', section[5])
+# 		print('\tAvail', section[6])
+# 		print('\tWait', section[7])
+# 		print('\tSatisfied', section[9])
+# 		print('\n')
+# 	print('\n')
 
-# offerings = {cid : [courseDetails]}
-# sectionDetails = [Section Num, DateTime, Room, Instructor, Quota, Enrol, Avail, Wait, Remarks]
-# courseDetails = [CourseCode, Course Title, Credits, [Pre-re(Course Code)], [Exclusion(Course Code], Course Descr, [[sectionDetails](s)]]
-courseOfferings = {'COMP4332L1':
-					   ['COMP4332', 'Big Data Mining and Management', 3,[], [], "This is a big data course that teaches problem solving",
-						[['L1', '2018-02-01 15:30', 'G010', 'Prof Raymond', 100, 51, 49, 0,'can take' ]]],
-				   'RMBI4310L1':
-					   ['RMBI4310', 'Advanced Data Mining for Risk Management and Business Intelligence', 3,[], [], "This is a big data course that teaches problem solving",
-						[['L1', '2018-02-01 15:30', 'G010', 'Prof Raymond', 100, 52, 48, 0,'can take' ]]],
-				   'COMP4333L1':
-					   ['COMP4333', 'Big Data Mining and Management', 3,[], [], "This is a big data course that teaches problem solving",
-						[['L1', '2018-02-01 15:30', 'G010', 'Prof Raymond', 100, 51, 49, 0,'can take' ]]]
-				   }
-courses = ["COMP4332" , "ELEC1010", "COMP3221", "Big Data Management", "Dumb Data", "sth"]
-#courses = courseOfferings.keys()
+# # offerings = {cid : [courseDetails]}
+# # sectionDetails = [Section Num, DateTime, Room, Instructor, Quota, Enrol, Avail, Wait, Remarks]
+# # courseDetails = [CourseCode, Course Title, Credits, [Pre-re(Course Code)], [Exclusion(Course Code], Course Descr, [[sectionDetails](s)]]
+# courseOfferings = {'COMP4332L1':
+# 					   ['COMP4332', 'Big Data Mining and Management', 3,[], [], "This is a big data course that teaches problem solving",
+# 						[['L1', '2018-02-01 15:30', 'G010', 'Prof Raymond', 100, 51, 49, 0,'can take' ]]],
+# 				   'RMBI4310L1':
+# 					   ['RMBI4310', 'Advanced Data Mining for Risk Management and Business Intelligence', 3,[], [], "This is a big data course that teaches problem solving",
+# 						[['L1', '2018-02-01 15:30', 'G010', 'Prof Raymond', 100, 52, 48, 0,'can take' ]]],
+# 				   'COMP4333L1':
+# 					   ['COMP4333', 'Big Data Mining and Management', 3,[], [], "This is a big data course that teaches problem solving",
+# 						[['L1', '2018-02-01 15:30', 'G010', 'Prof Raymond', 100, 51, 49, 0,'can take' ]]]
+# 				   }
+# courses = ["COMP4332" , "ELEC1010", "COMP3221", "Big Data Management", "Dumb Data", "sth"]
+# #courses = courseOfferings.keys()
 
 # 5.4
 def waitingListSizePrediction(cc, ln, ts):
